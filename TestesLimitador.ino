@@ -16,6 +16,7 @@ int pwm_out = 0;
 // Variáveis do PD
 float Kp = 1;                                            // Ganho proporcional
 float Kd = 0;                                            // Ganho derivativo
+float N = 0;                                             // Filtro do termo derivativo
 
 // Variáveis avulsas (organizar depois)
 float lastError = 0;                                     // Último erro
@@ -105,6 +106,11 @@ float throttleValue(float dadoBruto){
   return valorConvertido;               // Retorno
 }
 
+// Converte Throttle em PWM
+//float pwmValue(float dadoThrottle){
+
+//}
+
 // Calcula o tempo entre execuções
 unsigned long loopInterval(){
   unsigned long currentMillis = millis();                   // Pega o tempo atual em milissegundos
@@ -153,7 +159,7 @@ void loop(){
       // ============== Teste de continuidade ==============
       // Testa se deve sair da lógica comparando a entrada com o valor de ativação do PD
       int pwm_in = pulseIn(receptorPin, HIGH);                                        // Lendo o novo sinal do receptr
-      if(pwm_in <= valor_act){                                                        // Testa se deve desativar o PD
+      if(pwm_in <= pwn_static){                                                       // Testa se deve desativar o PD
         pwm_out = constrain(pwm_in, valor_min, valor_max);                            // Se sim, pega o novo pwm_out
         break;                                                                        // Finaliza a execução do PD
       }
@@ -165,8 +171,12 @@ void loop(){
 
       // ============== Operações do PD ===================
       float error = targetValue - Potencia;                                            // Calcula o termo potencial
-      float derivative = error - lastError;                                            // Calcula o termo derivativo
-      float output = Kp*error + Kd*derivative + pwm_static;                            // Calculo do PD
+      float derivative = (error - lastError)/interval;                                 // Calcula o termo derivativo
+      float filteredDerivative = (N*derivative)/(1+(N*interval));
+
+      // Se tiver dando problema, o erro pode ser essa lógica de somar o pwm_static
+      float output = Kp*error + Kd*filteredDerivative;                                 // Calculo do PD (output)
+                            
       pwm_out = constrain(output, valor_min, valor_max);                               // O valor que será impresso no motor
       pwm_static = pwm_out;                                                            // Preparando o pwm_static para a proxima iteração
       lastError = error;                                                               // Erro da próxima iteração
