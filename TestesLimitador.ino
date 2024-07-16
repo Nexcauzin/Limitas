@@ -59,8 +59,9 @@ float valorConvertido = 0;
 
 // Variáveis para controle de tempo
 unsigned long previousMillis = 0;
-unsigned long interval = 0;
+unsigned long printMillis = 0;
 const unsigned long testaPrint = 100;
+unsigned long interval = 0;
 
 // ===== Funções para a operação de Potência =====
 // Função para calcular a Corrente
@@ -149,7 +150,7 @@ void loop(){
     pwm_static = pwm_in;                                                              // Pegando o valor que vai ser iterado pelo PD
     while(1){                                                                         // Loop infinito
       // ============== Extração do dt ====================
-      currentMillis = millis();
+      unsigned long currentMillis = millis();
       interval = loopInterval();
       
       // ============== Teste de continuidade ==============
@@ -182,8 +183,9 @@ void loop(){
       float Throttle = throttleValue(pwm_static);                                      // Calcula a % de Throttle do motor
       
       //========== Coloca a lógica ai: Se passou 100ms E display_100 = True:
-      if(currentMillis - previousMillis >= testaPrint){
+      if(currentMillis - printMillis >= testaPrint){
         Serial.println(String(Potencia) + "," + String(Tensao) + "," + String(Corrente) + "," + String(Throttle)  + "," + String(pwm_out) + "," + String(interval)); // Pra salvar o Log 
+        printMillis = currentMillis;
       }
     }
   }
@@ -193,8 +195,8 @@ void loop(){
 
   motorPin.writeMicroseconds(pwm_out);                                                 // Escreve o PWM no pino do motor
   
-  if(currentMillis - previousMillis >= testaPrint){
+  if(currentMillis - printMillis >= testaPrint){
       Serial.println(String(Potencia) + "," + String(Tensao) + "," + String(Corrente) + "," + String(Throttle) + "," + String(pwm_out) + "," + String(interval)); // Pra salvar o log
+      printMillis = currentMillis;
     }
-  }
 }
