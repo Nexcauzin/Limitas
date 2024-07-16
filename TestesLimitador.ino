@@ -1,3 +1,8 @@
+// ATIVAÇÃO DO PRINT A CADA 100ms
+// true = dt de 100ms
+// false = dt de execução do código
+bool testaDt = true;
+
 // ========== Definições para o Motor ===========
 #include <Servo.h>
 #define receptorPin 13
@@ -182,10 +187,16 @@ void loop(){
       //=========== Valor do Throttle do motor ===========
       float Throttle = throttleValue(pwm_static);                                      // Calcula a % de Throttle do motor
       
-      //========== Coloca a lógica ai: Se passou 100ms E display_100 = True:
-      if(currentMillis - printMillis >= testaPrint){
+      // Testa que tipo de print vai fazer
+      if(testaDt){
         Serial.println(String(Potencia) + "," + String(Tensao) + "," + String(Corrente) + "," + String(Throttle)  + "," + String(pwm_out) + "," + String(interval)); // Pra salvar o Log 
-        printMillis = currentMillis;
+      }
+
+      else{
+        if (currentMillis - printMillis >= testaPrint){
+          Serial.println(String(Potencia) + "," + String(Tensao) + "," + String(Corrente) + "," + String(Throttle)  + "," + String(pwm_out) + "," + String(currentMillis - printMillis)); // Pra salvar o Log 
+          printMillis = currentMillis;
+        }
       }
     }
   }
@@ -195,8 +206,14 @@ void loop(){
 
   motorPin.writeMicroseconds(pwm_out);                                                 // Escreve o PWM no pino do motor
   
-  if(currentMillis - printMillis >= testaPrint){
-      Serial.println(String(Potencia) + "," + String(Tensao) + "," + String(Corrente) + "," + String(Throttle) + "," + String(pwm_out) + "," + String(interval)); // Pra salvar o log
-      printMillis = currentMillis;
+    if(testaDt){
+      Serial.println(String(Potencia) + "," + String(Tensao) + "," + String(Corrente) + "," + String(Throttle)  + "," + String(pwm_out) + "," + String(interval)); // Pra salvar o Log 
     }
+
+    else{
+      if (currentMillis - printMillis >= testaPrint){
+        Serial.println(String(Potencia) + "," + String(Tensao) + "," + String(Corrente) + "," + String(Throttle)  + "," + String(pwm_out) + "," + String(currentMillis - printMillis)); // Pra salvar o Log 
+        printMillis = currentMillis;
+    }
+  }
 }
