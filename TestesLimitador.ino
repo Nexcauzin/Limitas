@@ -59,9 +59,8 @@ float valorConvertido = 0;
 
 // Variáveis para controle de tempo
 unsigned long previousMillis = 0;
-unsigned long currentMillis = 0;
 unsigned long interval = 0;
-unsigned long testaPrint = 0;
+const unsigned long testaPrint = 100;
 
 // ===== Funções para a operação de Potência =====
 // Função para calcular a Corrente
@@ -106,16 +105,11 @@ float throttleValue(float dadoBruto){
   return valorConvertido;               // Retorno
 }
 
-// Converte Throttle em PWM
-//float pwmValue(float dadoThrottle){
-
-//}
-
 // Calcula o tempo entre execuções
 unsigned long loopInterval(){
   unsigned long currentMillis = millis();                   // Pega o tempo atual em milissegundos
   unsigned long interval = currentMillis - previousMillis;  // Calcula o intervalo
-  previousMillis = currentMillis;                           // Atualiza o previousMillis para o próximo loop
+  previousMillis = currentMillis;                           // Atualiza o previousMillis para o próximo loop  
   return interval;                                          // Retorna o intervalo
 }
 
@@ -137,7 +131,8 @@ void setup(){
 // ================== LOOP =====================
 void loop(){    
   // ============== Extração do dt ====================
-  unsigned long interval = loopInterval();
+  unsigned long currentMillis = millis();
+  interval = loopInterval();
 
   int pwm_in = pulseIn(receptorPin, HIGH);                                           // Faz a leitura do pino do receptor
   // ============== Cálculo da Potência ===============
@@ -154,12 +149,13 @@ void loop(){
     pwm_static = pwm_in;                                                              // Pegando o valor que vai ser iterado pelo PD
     while(1){                                                                         // Loop infinito
       // ============== Extração do dt ====================
-      unsigned long interval = loopInterval();
+      currentMillis = millis();
+      interval = loopInterval();
       
       // ============== Teste de continuidade ==============
       // Testa se deve sair da lógica comparando a entrada com o valor de ativação do PD
       int pwm_in = pulseIn(receptorPin, HIGH);                                        // Lendo o novo sinal do receptr
-      if(pwm_in <= pwn_static){                                                       // Testa se deve desativar o PD
+      if(pwm_in <= pwm_static){                                                       // Testa se deve desativar o PD
         pwm_out = constrain(pwm_in, valor_min, valor_max);                            // Se sim, pega o novo pwm_out
         break;                                                                        // Finaliza a execução do PD
       }
@@ -176,7 +172,7 @@ void loop(){
 
       // Se tiver dando problema, o erro pode ser essa lógica de somar o pwm_static
       float output = Kp*error + Kd*filteredDerivative;                                 // Calculo do PD (output)
-                            
+
       pwm_out = constrain(output, valor_min, valor_max);                               // O valor que será impresso no motor
       pwm_static = pwm_out;                                                            // Preparando o pwm_static para a proxima iteração
       lastError = error;                                                               // Erro da próxima iteração
@@ -184,9 +180,11 @@ void loop(){
 
       //=========== Valor do Throttle do motor ===========
       float Throttle = throttleValue(pwm_static);                                      // Calcula a % de Throttle do motor
-
-      //========== 
-      Serial.println(String(Potencia) + "," + String(Tensao) + "," + String(Corrente) + "," + String(Throttle)  + "," + String(pwm_out) + "," + String(interval)); // Pra salvar o Log 
+      
+      //========== Coloca a lógica ai: Se passou 100ms E display_100 = True:
+      if(currentMillis - previousMillis >= testaPrint){
+        Serial.println(String(Potencia) + "," + String(Tensao) + "," + String(Corrente) + "," + String(Throttle)  + "," + String(pwm_out) + "," + String(interval)); // Pra salvar o Log 
+      }
     }
   }
 
@@ -194,5 +192,9 @@ void loop(){
   float Throttle = throttleValue(pwm_out);                                             // Calcula a % de Throttle do motor
 
   motorPin.writeMicroseconds(pwm_out);                                                 // Escreve o PWM no pino do motor
-  Serial.println(String(Potencia) + "," + String(Tensao) + "," + String(Corrente) + "," + String(Throttle) + "," + String(pwm_out) + "," + String(interval)); // Pra salvar o log
+  
+  if(currentMillis - previousMillis >= testaPrint){
+      Serial.println(String(Potencia) + "," + String(Tensao) + "," + String(Corrente) + "," + String(Throttle) + "," + String(pwm_out) + "," + String(interval)); // Pra salvar o log
+    }
+  }
 }
