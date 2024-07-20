@@ -1,3 +1,8 @@
+// ATIVAÇÃO DO PRINT A CADA 100ms
+// false = dt de 100ms
+// true = dt de execução do código
+bool testaDt = false;
+
 // ========== Definições para o Motor ===========
 #include <Servo.h>
 #define receptorPin 13
@@ -6,17 +11,19 @@
 Servo motorPin;                                          // Criando uma classe servo com nome sinalReceptor
 
 // Limites em Microssegundos
-const int valor_min = 1000;
+const int valor_min = 1321;
 const int valor_max = 1983;
 const int valor_act = 2000;
 int pwm_out = 0;
 
 
-// =========== Definições para o PD =============
-// Variáveis do PD
-float Kp = 1;                                            // Ganho proporcional
-float Kd = 0;                                            // Ganho derivativo
-float N = 0;                                             // Filtro do termo derivativo
+// =========== Definições para o PID =============
+// Variáveis do PID
+float Kp = 50;                                            // Ganho proporcional
+float Ki = 100;                                            // Ganho integral
+float Kd = 50;                                            // Ganho derivativo
+float N = 2;                                              // Filtro do termo derivativo
+float integral;
 
 // Variáveis avulsas (organizar depois)
 float lastError = 0;                                     // Último erro
@@ -27,14 +34,10 @@ float pwm_static = 0;
 
 // =========== SENSOR DE TENSÃO ==================
 // Sensor de Tensão
-#define PinoTensao A1
-// Variável de referência de tensão 
-//float RefTensao = 5.0;
-//float RefTensao = 4.89; // A tensão que o Arduino Mega gera
-float RefTensao = 4.73;
-float Tensao = 0;
-float tensao = 0;
+#include <Wire.h>
+#include <Adafruit_INA219.h>
 
+Adafruit_INA219 ina219;
 
 // ========== Sensor de Corrente ================
 #define PinoCorrente A0
@@ -70,24 +73,17 @@ float calculoCorrente(){
   adcValue = analogRead(PinoCorrente);
   adcVoltage = (adcValue / 1024.0) * 5000;
   currentValue = ((adcVoltage - offsetVoltage) / sensitivity);
-  return currentValue;                                            // Retorna o valor calculado
-}
-
-// Função para calcular a Tensão
-float calculoTensao(){                                         
-  tensao = analogRead(PinoTensao) * RefTensao * 5 / 1024;   // Leitura do pino analógico de tensão
-  // Tensão real = valor lido no ADC * tensão de referência * divisor / resolução
-  return tensao;                                            // Retorna o valor calculado
+  return mediaMovel(currentValue);                                            // Retorna o valor calculado
 }
 
 // Média móvel potência
-float mediaMovel(float potLida){
+float mediaMovel(float corLida){
   // Rotação do vetor
   for(int i = numReadings-1; i > 0; i--){
     readings[i] = readings[i-1];
   }
 
-  readings[0] = potLida;                // Armazena última potência lida
+  readings[0] = corLida;                // Armazena última potência lida
 
   float soma = 0.0;                     // Definindo a variável zerada da soma que será realizada
 
@@ -101,9 +97,7 @@ float mediaMovel(float potLida){
 
 // Calcula o Throttle (%)
 float throttleValue(float dadoBruto){
-  subtrai = dadoBruto-1000;             // Torna o novo intervalo entre 0-1000
-  valorConvertido = subtrai/10;         // Muda de 0-1000 para 0-100.0 (%)
-  return valorConvertido;               // Retorno
+  return map(dadoBruto, 1321, 1828, 0, 100);               // Retorno
 }
 
 // Calcula o tempo entre execuções
@@ -138,8 +132,8 @@ void loop(){
   int pwm_in = pulseIn(receptorPin, HIGH);                                           // Faz a leitura do pino do receptor
   // ============== Cálculo da Potência ===============
   Corrente = abs(calculoCorrente());                                                 // Obtendo a corrente
-  Tensao = calculoTensao();                                                          // Obtendo a tensão
-  Potencia = mediaMovel(Corrente * Tensao);                                          // Calculando a potência
+  float Tensao = ina219.getBusVoltage_V();                                                          // Obtendo a tensão
+  Potencia = Corrente * Tensao;                                          // Calculando a potência
 
   if(pwm_in <= valor_act || Potencia <= margemSeguranca){                            // Testa se deve acionar o PD
     pwm_out = constrain(pwm_in, valor_min, valor_max);                               // Força que o valor esteja no intervalo de interesse
@@ -147,7 +141,8 @@ void loop(){
 
 
   else{
-    pwm_static = pwm_in;                                                              // Pegando o valor que vai ser iterado pelo PD
+    pwm_static = pwm_in;                                                              // Pegando o valor que vai ser iterado pelo PD4
+    float lastPotencia = Potencia;
     while(1){                                                                         // Loop infinito
       // ============== Extração do dt ====================
       unsigned long currentMillis = millis();
@@ -163,16 +158,20 @@ void loop(){
 
       // ============== Cálculo da Potência ===============
       Corrente = abs(calculoCorrente());                                               // Obtendo a corrente
-      Tensao = calculoTensao();                                                        // Obtendo a tensão
-      Potencia = mediaMovel(Corrente * Tensao);                                        // Calculando a potência
+      float Tensao = ina219.getBusVoltage_V();                                               // Obtendo a tensão
+      Potencia = Corrente * Tensao;                                                    // Calculando a potência
 
-      // ============== Operações do PD ===================
+      // ============== Operações do PID ===================
       float error = targetValue - Potencia;                                            // Calcula o termo potencial
-      float derivative = (error - lastError)/interval;                                 // Calcula o termo derivativo
-      float filteredDerivative = (N*derivative)/(1+(N*interval));
-
+      float proportional = Kp * error;
+      integral += Ki * interval * error;
+      float filteredError = (N/(1 + N * interval)) * (error - lastError);
+      float derivative = Kd * filteredError;                                           // Calcula o termo derivativo
+      // Caso o derivativo saia errado:
+      // float derivative = (lastPotencia - Potencia) * Kd * interval
+  
       // Se tiver dando problema, o erro pode ser essa lógica de somar o pwm_static
-      float output = Kp*error + Kd*filteredDerivative;                                 // Calculo do PD (output)
+      float output = proportional + integral + derivative + pwm_static;                          // Calculo do PD (output)
 
       pwm_out = constrain(output, valor_min, valor_max);                               // O valor que será impresso no motor
       pwm_static = pwm_out;                                                            // Preparando o pwm_static para a proxima iteração
@@ -182,10 +181,16 @@ void loop(){
       //=========== Valor do Throttle do motor ===========
       float Throttle = throttleValue(pwm_static);                                      // Calcula a % de Throttle do motor
       
-      //========== Coloca a lógica ai: Se passou 100ms E display_100 = True:
-      if(currentMillis - printMillis >= testaPrint){
+      // Testa que tipo de print vai fazer
+      if(testaDt){
         Serial.println(String(Potencia) + "," + String(Tensao) + "," + String(Corrente) + "," + String(Throttle)  + "," + String(pwm_out) + "," + String(interval)); // Pra salvar o Log 
-        printMillis = currentMillis;
+      }
+
+      else{
+        if (currentMillis - printMillis >= testaPrint){
+          Serial.println(String(Potencia) + "," + String(Tensao) + "," + String(Corrente) + "," + String(Throttle)  + "," + String(pwm_out) + "," + String(currentMillis - printMillis)); // Pra salvar o Log 
+          printMillis = currentMillis;
+        }
       }
     }
   }
@@ -195,8 +200,14 @@ void loop(){
 
   motorPin.writeMicroseconds(pwm_out);                                                 // Escreve o PWM no pino do motor
   
-  if(currentMillis - printMillis >= testaPrint){
-      Serial.println(String(Potencia) + "," + String(Tensao) + "," + String(Corrente) + "," + String(Throttle) + "," + String(pwm_out) + "," + String(interval)); // Pra salvar o log
-      printMillis = currentMillis;
+    if(testaDt){
+      Serial.println(String(Potencia) + "," + String(Tensao) + "," + String(Corrente) + "," + String(Throttle)  + "," + String(pwm_out) + "," + String(interval)); // Pra salvar o Log 
     }
+
+    else{
+      if (currentMillis - printMillis >= testaPrint){
+        Serial.println(String(Potencia) + "," + String(Tensao) + "," + String(Corrente) + "," + String(Throttle)  + "," + String(pwm_out) + "," + String(currentMillis - printMillis)); // Pra salvar o Log 
+        printMillis = currentMillis;
+    }
+  }
 }
